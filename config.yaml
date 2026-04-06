@@ -1,0 +1,39 @@
+# ============================================================================
+# North.Cloud Anomaly Detection - Configuration
+# ============================================================================
+# CLI arguments override these values when provided.
+
+
+generation:
+  num_accounts: 5
+  num_months: 12
+  target_rows: 1000000
+  seed: 42
+
+  services:
+    - AmazonEC2
+    - AmazonS3
+    - AmazonRDS
+    - AWSLambda
+    - AmazonDynamoDB
+    - AmazonSageMaker
+    - AmazonElastiCache
+    - AWSDataTransfer
+
+  regions:
+    - us-east-1
+    - us-west-2
+    - eu-west-1
+    - ap-southeast-1
+
+
+anomalies:
+  num_spike_anomalies: 15
+  num_cascade_anomalies: 8
+  num_drift_anomalies: 5
+  seasonal_strength: 3          # seasonal effect strength on a scale of 1-5
+  spike_magnitude: 3.0
+
+
+output:
+  output_dir: ./output
