@@ -79,7 +79,7 @@ def _add_subparser_to_generate_synthetic_cur_data(
         "--output_dir",
         type=str,
         default=None,
-        help="Directory to save output files (default: ./output).",
+        help="Directory to save output files (default: ./output/synthetic-data).",
     )
     parser.add_argument(
         "--seed",
@@ -95,6 +95,30 @@ def _add_subparser_to_generate_synthetic_cur_data(
     )
 
 
+def _add_subparser_to_run_pipeline(
+    subparsers: ArgumentParser,
+) -> None:
+    subparsers.add_parser(
+        name="run_pipeline",
+        help=(
+            "Run the ML anomaly detection pipeline on the generated "
+            "synthetic dataset."
+        ),
+        description=(
+            "End-to-end orchestrator that loads synthetic AWS CUR data, "
+            "engineers features, runs five detection models (baseline "
+            "threshold, STL decomposition, LightGBM, Isolation Forest, "
+            "weighted ensemble), performs cascade clustering, generates "
+            "SHAP explanations, evaluates all models, and produces 15 "
+            "diagnostic plots."
+        ),
+        aliases=[
+            "pipeline",
+            "detect",
+        ],
+    )
+
+
 if __name__ == "__main__":
     parser = ArgumentParser(
         description="North.Cloud - Anomaly Detection Pipeline",
@@ -102,11 +126,18 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(dest="subcommands")
 
     _add_subparser_to_generate_synthetic_cur_data(subparsers)
+    _add_subparser_to_run_pipeline(subparsers)
 
     kwargs = parser.parse_args().__dict__
     if subcommands := kwargs.pop("subcommands"):
         from src.engine import Engine
-        getattr(Engine(), subcommands)(**kwargs)
+        method = {
+            "generate_cur": "generate_synthetic_cur_data",
+            "generate_data": "generate_synthetic_cur_data",
+            "pipeline": "run_pipeline",
+            "detect": "run_pipeline",
+        }.get(subcommands, subcommands)
+        getattr(Engine(), method)(**kwargs)
     else:
         parser.print_help()
 

@@ -36,4 +36,4 @@ anomalies:
 
 
 output:
-  output_dir: ./output
+  output_dir: ./output/synthetic-data
