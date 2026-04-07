@@ -16,10 +16,11 @@ def detect_cascades(
     account.
 
     For each account with at least 2 ensemble-flagged rows, DBSCAN
-    clusters on a feature matrix of [date_ordinal, one-hot-service].
-    The date ordinal is scaled so that eps_days controls temporal
-    proximity. Clusters that contain anomalous rows from 2 or more
-    distinct services are marked as predicted cascades.
+    clusters on a feature matrix of [date_ordinal] only. The date
+    ordinal is scaled so that eps_days controls temporal proximity.
+    Service diversity is checked post-clustering: clusters that
+    contain anomalous rows from 2 or more distinct services are
+    marked as predicted cascades.
 
     test_df (pd.DataFrame): Test data with ensemble_is_anomaly column.
     eps_days (float): Maximum number of days apart for DBSCAN
