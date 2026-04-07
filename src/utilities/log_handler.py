@@ -17,7 +17,7 @@ class LogHandler:
 
     def __init__(
             self,
-            name: str = "north-anomaly-detection",
+            name: str = "cloud-cost-anomaly-detection-pipeline",
             log_path: str = "logs/app.log",
             log_level: Optional[int] = None,
             log_format: Optional[str] = None,

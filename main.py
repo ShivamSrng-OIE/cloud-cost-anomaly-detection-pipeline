@@ -121,7 +121,7 @@ def _add_subparser_to_run_pipeline(
 
 if __name__ == "__main__":
     parser = ArgumentParser(
-        description="North.Cloud - Anomaly Detection Pipeline",
+        description="Cloud - Anomaly Detection Pipeline",
     )
     subparsers = parser.add_subparsers(dest="subcommands")
 

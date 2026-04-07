@@ -134,7 +134,7 @@ class Engine:
 
         # Configuration
         console_and_logger(self.__logger, "-" * 60)
-        console_and_logger(self.__logger, "North.Cloud - Synthetic AWS CUR Dataset Generator")
+        console_and_logger(self.__logger, "Cloud - Synthetic AWS CUR Dataset Generator")
         console_and_logger(self.__logger, "-" * 60)
         console_and_logger(self.__logger, "")
 

@@ -1,4 +1,4 @@
-# North.Cloud Anomaly Detection
+# Cloud Anomaly Detection
 
 An end-to-end cloud cost anomaly detection system that generates realistic synthetic AWS Cost and Usage Report (CUR) data with injected anomalies, then runs a multi-model machine learning pipeline to detect, classify, explain, and visualize those anomalies. The entire workflow is driven from a single entry point with two subcommands.
 
