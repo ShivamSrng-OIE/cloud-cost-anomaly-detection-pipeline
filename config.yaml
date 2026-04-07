@@ -28,11 +28,12 @@ generation:
 
 
 anomalies:
-  num_spike_anomalies: 15
-  num_cascade_anomalies: 8
-  num_drift_anomalies: 5
+  num_spike_anomalies: 40
+  num_cascade_anomalies: 20
+  num_drift_anomalies: 15
   seasonal_strength: 3          # seasonal effect strength on a scale of 1-5
-  spike_magnitude: 3.0
+  spike_magnitude: 6.0
+  cascade_min_services: 3
 
 
 output:

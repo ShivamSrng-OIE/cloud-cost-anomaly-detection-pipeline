@@ -50,13 +50,13 @@ def detect_cascades(
         if len(acct_df) < min_samples:
             continue
 
-        # Build feature matrix: date ordinal + one-hot service
+        # Build feature matrix: date ordinal only.
+        # Service diversity is checked post-clustering, so including
+        # service one-hot in features would push different services apart
+        # and prevent the cross-service clusters we're looking for.
         date_ordinal = acct_df["date"].map(
             lambda d: d.toordinal()
         ).values.reshape(-1, 1).astype(float)
-
-        services = acct_df["service"].unique()
-        service_dummies = pd.get_dummies(acct_df["service"]).values.astype(float)
 
         # Scale date ordinal so eps corresponds to eps_days
         scaler = StandardScaler()
@@ -70,8 +70,7 @@ def detect_cascades(
 
         eps_scaled = eps_days * one_day_scaled
 
-        # Combine features with service dummies weighted lower
-        features = np.hstack([date_scaled, service_dummies * 0.3])
+        features = date_scaled
 
         dbscan = DBSCAN(eps=eps_scaled, min_samples=min_samples)
         labels = dbscan.fit_predict(features)

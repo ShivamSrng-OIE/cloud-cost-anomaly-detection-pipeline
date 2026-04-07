@@ -99,6 +99,7 @@ class Engine:
             "num_drift_anomalies":   _first(num_drift_anomalies, anomaly_consts.get("num_drift_anomalies"), 5),
             "seasonal_strength":     _first(seasonal_strength, anomaly_consts.get("seasonal_strength"), 3),
             "spike_magnitude":       _first(spike_magnitude, anomaly_consts.get("spike_magnitude"), 3.0),
+            "cascade_min_services":  anomaly_consts.get("cascade_min_services", 3),
             "output_dir":            _first(output_dir, output_consts.get("output_dir"), "./output/synthetic-data"),
         }
 
@@ -571,4 +572,32 @@ class Engine:
         print(f"\n{'='*70}")
         print(f"  Pipeline finished successfully.")
         print(f"{'='*70}\n")
+
+    def optimize_pipeline(
+        self,
+        n_trials: Optional[int] = None,
+        timeout: Optional[int] = None,
+    ) -> None:
+        """
+        Runs Optuna hyperparameter optimization over the anomaly detection
+        pipeline. Best parameters are written back to pipeline_config.yaml.
+
+        n_trials (int, optional): Max optimization trials (default from config).
+        timeout (int, optional): Wall-clock limit in minutes.
+        """
+        from src.optimization.optuna_optimizer import run_optimization
+
+        # Load defaults from pipeline_config.yaml if not overridden via CLI
+        config_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "pipeline_config.yaml",
+        )
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+
+        optuna_config = config.get("optuna", {})
+        trials = n_trials if n_trials is not None else optuna_config.get("n_trials", 50)
+        timeout_min = timeout if timeout is not None else optuna_config.get("timeout_minutes")
+
+        run_optimization(n_trials=trials, timeout_minutes=timeout_min)
 

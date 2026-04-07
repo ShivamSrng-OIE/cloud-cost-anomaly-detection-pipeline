@@ -1,67 +1,69 @@
-# Cloud Cost Anomaly Detection Pipeline Configuration
-
 paths:
-  data_dir: "./output/synthetic-data"
-  results_dir: "./output/anomaly-detection-results"
-  plots_dir: "./output/anomaly-detection-results/plots"
-  reports_dir: "./output/anomaly-detection-results/reports"
-
+  data_dir: ./output/synthetic-data
+  results_dir: ./output/anomaly-detection-results
+  plots_dir: ./output/anomaly-detection-results/plots
+  reports_dir: ./output/anomaly-detection-results/reports
 preprocessing:
   min_history_days: 28
   train_split_ratio: 0.7
-
 baseline_threshold:
-  thresholds: [0.30, 0.50, 0.75, 1.00]
-
+  thresholds:
+  - 0.3
+  - 0.5
+  - 0.75
+  - 1.0
 stl:
   period: 7
-  residual_threshold_sigma: 2.5
-
+  residual_threshold_sigma: 1.8579
 lightgbm:
-  objective: "regression"
-  metric: "rmse"
-  boosting_type: "gbdt"
-  num_leaves: 31
-  learning_rate: 0.05
-  feature_fraction: 0.8
-  bagging_fraction: 0.8
+  objective: regression
+  metric: rmse
+  boosting_type: gbdt
+  num_leaves: 77
+  learning_rate: 0.0379
+  feature_fraction: 0.583
+  bagging_fraction: 0.991
   bagging_freq: 5
   verbose: -1
-  n_estimators: 500
+  n_estimators: 1000
   early_stopping_rounds: 50
   random_state: 42
-  residual_threshold_sigma: 2.5
-
+  residual_threshold_sigma: 2.0052
 isolation_forest:
-  n_estimators: 200
-  contamination: 0.03
+  n_estimators: 400
+  contamination: 0.0128
   random_state: 42
   n_jobs: -1
-
 ensemble:
   weights:
-    stl: 0.25
-    lightgbm: 0.45
-    isolation_forest: 0.30
-  threshold: 0.40
-
+    stl: 0.5627
+    lightgbm: 0.3717
+    isolation_forest: 0.0655
+  threshold: 0.0888
 dbscan:
-  eps_days: 1
+  eps_days: 3
   min_samples: 2
-
 shap:
   max_samples: 500
   top_features: 10
-
+optuna:
+  n_trials: 50
+  timeout_minutes: null
 visualization:
   dpi: 150
-  figure_size_wide: [16, 6]
-  figure_size_square: [10, 8]
-  figure_size_tall: [12, 16]
+  figure_size_wide:
+  - 16
+  - 6
+  figure_size_square:
+  - 10
+  - 8
+  figure_size_tall:
+  - 12
+  - 16
   colors:
-    normal: "#2ecc71"
-    spike: "#e74c3c"
-    cascade: "#e67e22"
-    drift: "#9b59b6"
-    predicted: "#3498db"
-    threshold: "#95a5a6"
+    normal: '#2ecc71'
+    spike: '#e74c3c'
+    cascade: '#e67e22'
+    drift: '#9b59b6'
+    predicted: '#3498db'
+    threshold: '#95a5a6'

@@ -174,12 +174,19 @@ MONTH_END_SPIKE_MULTIPLIER = (1.2, 1.4)
 MONTH_START_SPIKE_SERVICES = {"AmazonS3", "AWSDataTransfer"}
 MONTH_END_SPIKE_SERVICES = {"AmazonSageMaker"}
 
-CASCADE_EC2_MULTIPLIER = (2.0, 3.0)
-CASCADE_S3_MULTIPLIER = (1.5, 2.0)
-CASCADE_DT_MULTIPLIER = (2.0, 3.0)
-CASCADE_SERVICES = ["AmazonEC2", "AmazonS3", "AWSDataTransfer"]
+CASCADE_SERVICE_MULTIPLIERS = {
+    "AmazonEC2": (2.0, 3.0),
+    "AmazonS3": (1.5, 2.5),
+    "AWSDataTransfer": (2.0, 3.0),
+    "AmazonRDS": (2.0, 3.0),
+    "AWSLambda": (1.5, 2.5),
+    "AmazonDynamoDB": (1.5, 2.5),
+    "AmazonSageMaker": (2.0, 3.5),
+    "AmazonElastiCache": (1.5, 2.5),
+}
+CASCADE_DEFAULT_MULTIPLIER = (2.0, 3.0)
 
-DRIFT_DAILY_COMPOUND = 1.05
+DRIFT_DAILY_COMPOUND = 1.20
 DRIFT_DURATION_RANGE = (5, 14)
 BLENDED_RATE_FACTOR = (0.92, 1.0)
 

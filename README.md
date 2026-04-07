@@ -1,6 +1,6 @@
 # Cloud Anomaly Detection
 
-An end-to-end cloud cost anomaly detection system that generates realistic synthetic AWS Cost and Usage Report (CUR) data with injected anomalies, then runs a multi-model machine learning pipeline to detect, classify, explain, and visualize those anomalies. The entire workflow is driven from a single entry point with two subcommands.
+An end-to-end cloud cost anomaly detection system that generates realistic synthetic AWS Cost and Usage Report (CUR) data with injected anomalies, then runs a multi-model machine learning pipeline to detect, classify, explain, and visualize those anomalies. Includes Optuna-based Bayesian hyperparameter optimization to automatically find the best model parameters. The entire workflow is driven from a single entry point with three subcommands.
 
 ---
 
@@ -14,10 +14,11 @@ An end-to-end cloud cost anomaly detection system that generates realistic synth
 6. [Configuration](#configuration)
 7. [Repository Structure](#repository-structure)
 8. [Pipeline Architecture](#pipeline-architecture)
-9. [Output Structure](#output-structure)
-10. [Detection Models](#detection-models)
-11. [Evaluation Metrics](#evaluation-metrics)
-12. [Visualizations](#visualizations)
+9. [Hyperparameter Optimization](#hyperparameter-optimization)
+10. [Output Structure](#output-structure)
+11. [Detection Models](#detection-models)
+12. [Evaluation Metrics](#evaluation-metrics)
+13. [Visualizations](#visualizations)
 
 ---
 
@@ -30,6 +31,8 @@ This project tackles the problem in two phases:
 **Phase 1 -- Synthetic Data Generation.** Produces a realistic multi-account, multi-service, multi-region AWS CUR dataset spanning configurable time periods. Three types of anomalies are injected at controlled rates: cost spikes (sudden single-day jumps), cascades (coordinated failures across multiple services within the same account), and drifts (gradual cost increases over days or weeks). Every anomalous row is labelled with ground-truth metadata so models can be evaluated against known answers.
 
 **Phase 2 -- Anomaly Detection Pipeline.** Loads the generated dataset, engineers 35 time-series features, runs four detection models (STL decomposition, LightGBM regression, Isolation Forest, and a baseline percentage-change threshold), combines them into a weighted ensemble, clusters flagged anomalies into cascade events using DBSCAN, generates SHAP-based explanations for every flagged row, evaluates all models with standard classification metrics, and produces 15 diagnostic visualizations.
+
+**Phase 3 -- Hyperparameter Optimization.** Uses Optuna's Tree-structured Parzen Estimator (TPE) to automatically search for the best model parameters across all pipeline components. Optimizes a composite objective (70% ensemble F1, 15% drift detection rate, 15% cascade detection rate) to prevent the optimizer from ignoring hard-to-detect anomaly types. Trials are pruned early via a median pruner, the study persists in SQLite for resumability, and the best parameters are written back to `pipeline_config.yaml`.
 
 ---
 
@@ -68,13 +71,13 @@ Install all dependencies:
 pip install -r requirements.txt
 ```
 
-The requirements file installs the following packages: numpy, pandas, tqdm, pyyaml, rich, lightgbm, shap, statsmodels, matplotlib, seaborn, and scikit-learn. Exact version constraints are specified in `requirements.txt`.
+The requirements file installs the following packages: numpy, pandas, tqdm, pyyaml, rich, lightgbm, shap, statsmodels, matplotlib, seaborn, scikit-learn, and optuna. Exact version constraints are specified in `requirements.txt`.
 
 ---
 
 ## Usage
 
-Everything runs through `main.py`. There are two subcommands.
+Everything runs through `main.py`. There are three subcommands.
 
 ### Step 1: Generate Synthetic Data
 
@@ -92,7 +95,15 @@ python main.py run_pipeline
 
 This reads `pipeline_config.yaml`, loads the synthetic data from `output/synthetic-data/`, runs all 18 pipeline steps (feature engineering through visualization), and writes results to `output/anomaly-detection-results/`.
 
-Both steps must be run in order. The pipeline requires the synthetic dataset to exist before it can operate.
+### Step 3: Optimize Hyperparameters (Optional)
+
+```bash
+python main.py optimize
+```
+
+This runs Optuna Bayesian hyperparameter optimization over all tunable pipeline parameters (LightGBM tree structure, STL thresholds, Isolation Forest contamination, ensemble weights and threshold, DBSCAN eps). The best parameters are automatically written back to `pipeline_config.yaml`. After optimization, re-run `python main.py run_pipeline` to use the optimized parameters.
+
+Steps 1 and 2 must be run in order. The pipeline requires the synthetic dataset to exist before it can operate. Step 3 is optional and can be run after step 1 to find the best parameters before the final pipeline run.
 
 ### Quick Start (Small Dataset)
 
@@ -100,6 +111,7 @@ To run a fast end-to-end test with minimal data:
 
 ```bash
 python main.py generate_data --num_accounts 2 --num_months 6 --target_rows 10000
+python main.py optimize --n_trials 10
 python main.py run_pipeline
 ```
 
@@ -134,6 +146,17 @@ Aliases: `pipeline`, `detect`
 
 Runs the ML anomaly detection pipeline. This subcommand takes no arguments. All configuration is read from `pipeline_config.yaml`.
 
+### optimize_pipeline
+
+Aliases: `optimize`, `tune`
+
+Runs Optuna Bayesian hyperparameter optimization over all tunable pipeline parameters. The best parameters are written back to `pipeline_config.yaml` when the study completes. The study is persisted in a SQLite database under `output/anomaly-detection-results/optuna/` so it can be resumed across multiple invocations.
+
+| Argument | Type | Default | Description |
+|---|---|---|---|
+| `--n_trials` | int | 50 | Maximum number of optimization trials. Each trial runs the full detection pipeline with a different parameter combination. |
+| `--timeout` | int | (none) | Wall-clock time limit in minutes. The study stops when either `n_trials` or `timeout` is reached, whichever comes first. |
+
 ---
 
 ## Configuration
@@ -158,15 +181,17 @@ Controls the anomaly detection pipeline. Organized into the following sections:
 
 **baseline_threshold** -- List of percentage-change thresholds to evaluate: 0.30 (30%), 0.50 (50%), 0.75 (75%), 1.00 (100%).
 
-**stl** -- Seasonal period (7 for weekly) and the residual z-score threshold (2.5 sigma) for flagging anomalies.
+**stl** -- Seasonal period (7 for weekly) and the residual z-score threshold for flagging anomalies. Tuned by Optuna.
 
-**lightgbm** -- Full set of LightGBM hyperparameters: objective, metric, boosting type, tree structure (31 leaves), learning rate (0.05), regularization (feature and bagging fractions), training limits (500 estimators with early stopping at 50 rounds), and the residual z-score threshold.
+**lightgbm** -- Full set of LightGBM hyperparameters: objective, metric, boosting type, tree structure, learning rate, regularization (feature and bagging fractions), training limits (with early stopping), and the residual z-score threshold. All tunable parameters are optimized by Optuna.
 
-**isolation_forest** -- Number of estimators (200), expected contamination rate (0.03), and parallelism setting.
+**isolation_forest** -- Number of estimators, expected contamination rate, and parallelism setting. Tuned by Optuna.
 
-**ensemble** -- Per-model weights for the weighted average (STL 0.25, LightGBM 0.45, Isolation Forest 0.30) and the ensemble score threshold (0.40) above which a row is flagged.
+**ensemble** -- Per-model weights for the weighted average and the ensemble score threshold above which a row is flagged. Tuned by Optuna.
 
-**dbscan** -- Parameters for cascade clustering: temporal proximity in days (eps_days: 1) and minimum cluster size (min_samples: 2).
+**dbscan** -- Parameters for cascade clustering: temporal proximity in days (eps_days) and minimum cluster size (min_samples). eps_days is tuned by Optuna.
+
+**optuna** -- Hyperparameter optimization settings: maximum number of trials (`n_trials`, default 50) and optional wall-clock timeout in minutes (`timeout_minutes`, default null for no limit). These defaults are used when `--n_trials` or `--timeout` are not provided on the command line.
 
 **shap** -- Maximum number of samples for SHAP computation (500) and number of top features to include in explanations (10).
 
@@ -208,6 +233,9 @@ north-anomaly-detection/
 
         clustering/
             cascade_detector.py  DBSCAN-based cascade identification
+
+        optimization/
+            optuna_optimizer.py  Optuna Bayesian hyperparameter optimization module
 
         explainability/
             shap_explainer.py    SHAP value computation and anomaly explanation generation
@@ -253,6 +281,38 @@ The anomaly detection pipeline executes 18 sequential steps:
 
 ---
 
+## Hyperparameter Optimization
+
+The optimization module uses Optuna to search for the best parameters across all pipeline components via Bayesian optimization.
+
+### Search Spaces
+
+| Component | Parameter | Range | Scale | Rationale |
+|---|---|---|---|---|
+| LightGBM | num_leaves | 15 -- 127 | linear | Controls tree complexity. Higher values capture service-specific patterns but risk overfitting to individual account noise. |
+| LightGBM | learning_rate | 0.005 -- 0.2 | log | Step size shrinkage. Log-uniform because the effect is multiplicative. |
+| LightGBM | feature_fraction | 0.5 -- 1.0 | linear | Column subsampling. Reduces correlation between trees and prevents over-reliance on dominant features like cost\_lag\_1d. |
+| LightGBM | bagging_fraction | 0.5 -- 1.0 | linear | Row subsampling. Combined with feature_fraction, this is the primary regularization lever. |
+| LightGBM | n_estimators | 200 -- 1500 | step=100 | Maximum boosting rounds. Early stopping typically halts before this ceiling. |
+| LightGBM | residual_sigma | 0.5 -- 3.0 | linear | Residual z-score threshold. Lower values catch more drifts but increase false positives on normal Monday spikes. |
+| STL | residual_sigma | 0.5 -- 3.0 | linear | Same concept applied to STL decomposition residuals. Critical for drift detection. |
+| Isolation Forest | contamination | 0.003 -- 0.03 | log | Expected anomaly fraction. Must approximate reality; too high floods false positives. |
+| Isolation Forest | n_estimators | 100 -- 500 | step=50 | Number of isolation trees. More trees give more stable scores. |
+| Ensemble | weights (×3) | 0.1 -- 1.0 each | linear | Three raw weights normalized to sum to 1 (Dirichlet-like). Every convex combination is reachable. |
+| Ensemble | threshold | 0.05 -- 0.40 | linear | Final decision boundary on the blended [0, 1] score. |
+| DBSCAN | eps_days | 1 -- 5 | integer | Max temporal distance for cascade grouping. |
+
+### Optimization Strategy
+
+- **Sampler**: TPE (Tree-structured Parzen Estimator) with 15 random startup trials for exploration before Bayesian exploitation begins.
+- **Pruner**: Median pruner with 10 startup trials. Reports intermediate F1 after STL (step 0) and LightGBM (step 1). Trials below the running median are killed early, saving up to 60% of compute.
+- **Objective**: Composite score = 0.70 × ensemble F1 + 0.15 × drift detection rate + 0.15 × cascade detection rate. The penalty terms prevent the optimizer from ignoring hard-to-detect anomaly types in favor of easy spike recall.
+- **Validation**: Strict chronological train/test split (same ratio as the main pipeline). No random cross-validation to avoid future data leakage.
+- **Persistence**: Study is stored in SQLite (`output/anomaly-detection-results/optuna/study.db`). Supports resuming interrupted runs and incremental trial additions via `load_if_exists`.
+- **Outputs**: Best parameters are merged back into `pipeline_config.yaml` (preserving all non-tuned settings). A trial report CSV is saved for audit.
+
+---
+
 ## Output Structure
 
 After running both commands, the output directory contains:
@@ -267,6 +327,10 @@ output/
 
     anomaly-detection-results/
         scored_test_set.csv           Full test set with all model scores and predictions
+
+        optuna/
+            study.db                  SQLite-backed Optuna study (survives restarts)
+            trial_report.csv          Per-trial parameters, scores, and diagnostics
 
         reports/
             model_comparison.csv      Side-by-side model performance metrics
@@ -302,19 +366,19 @@ A non-ML approach that flags any row where the absolute percentage change (relat
 
 ### STL Decomposition
 
-Decomposes each (account, service, region) time-series into three additive components: a long-term trend, a repeating weekly seasonal pattern, and a residual. The decomposition uses Loess smoothing with robust fitting to prevent outliers from contaminating the trend and seasonal estimates. Anomalies are identified as test rows where the residual deviates more than 2.5 standard deviations from the training residual distribution. This approach captures anomalies that persist after removing expected seasonal and trend behavior.
+Decomposes each (account, service, region) time-series into three additive components: a long-term trend, a repeating weekly seasonal pattern, and a residual. The decomposition uses Loess smoothing with robust fitting to prevent outliers from contaminating the trend and seasonal estimates. Anomalies are identified as test rows where the residual deviates more than a configurable number of standard deviations from the training residual distribution. The residual sigma threshold is tuned by Optuna. This approach captures anomalies that persist after removing expected seasonal and trend behavior.
 
 ### LightGBM Regression
 
-A gradient-boosted decision tree model trained to predict the expected daily cost from 35 engineered features. Trees are built sequentially, each correcting the errors of the previous ensemble. Early stopping on a chronological validation set prevents overfitting. Anomalies are identified as rows where the prediction residual (actual cost minus predicted cost) exceeds 2.5 standard deviations of the training residual distribution. This approach captures complex multi-feature interactions that simpler models miss.
+A gradient-boosted decision tree model trained to predict the expected daily cost from 35 engineered features. Trees are built sequentially, each correcting the errors of the previous ensemble. Early stopping on a chronological validation set prevents overfitting. Anomalies are identified as rows where the prediction residual (actual cost minus predicted cost) exceeds a configurable sigma threshold of the training residual distribution. All LightGBM hyperparameters (num_leaves, learning_rate, feature/bagging fractions, n_estimators, residual sigma) are tuned by Optuna. This approach captures complex multi-feature interactions that simpler models miss.
 
 ### Isolation Forest
 
-An unsupervised algorithm that isolates data points by randomly partitioning the feature space. Anomalous points, having extreme or unusual feature values, require fewer random splits to isolate than normal points. The model builds 200 random trees and scores each test point by its average isolation depth. The contamination parameter (3%) calibrates the decision boundary. This approach provides a complementary perspective because it does not rely on prediction accuracy or time-series structure.
+An unsupervised algorithm that isolates data points by randomly partitioning the feature space. Anomalous points, having extreme or unusual feature values, require fewer random splits to isolate than normal points. The number of trees and the contamination parameter are tuned by Optuna. This approach provides a complementary perspective because it does not rely on prediction accuracy or time-series structure.
 
 ### Weighted Ensemble
 
-Combines the three model scores (STL, LightGBM, Isolation Forest) into a single score. Each model's raw scores are first normalized to the 0-to-1 range using min-max scaling across the test set, then combined as a weighted average with weights of 0.25 (STL), 0.45 (LightGBM), and 0.30 (Isolation Forest). Rows where the resulting ensemble score exceeds 0.40 are flagged as anomalies. The ensemble reduces individual model blind spots: different models tend to produce different false positives, so combining them improves overall reliability.
+Combines the three model scores (STL, LightGBM, Isolation Forest) into a single score. Each model's raw scores are first normalized to the 0-to-1 range using min-max scaling across the test set, then combined as a weighted average. The per-model weights and the ensemble score threshold are tuned by Optuna using a Dirichlet-like sampling strategy that ensures every convex weight combination is reachable. The ensemble reduces individual model blind spots: different models tend to produce different false positives, so combining them improves overall reliability.
 
 ---
 

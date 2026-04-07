@@ -9,7 +9,8 @@ from src.utilities.general_utils import console_and_logger
 from src.utilities.consts_handler import (
     SERVICE_CONFIG,
     ANOMALY_LOG_COLUMNS,
-    CASCADE_SERVICES,
+    CASCADE_DEFAULT_MULTIPLIER,
+    CASCADE_SERVICE_MULTIPLIERS,
     DRIFT_DURATION_RANGE,
 )
 
@@ -216,8 +217,10 @@ class AnomalyPlanner:
         Creates cascade anomalies where multiple related services spike
         on the same day for one account, simulating a real-world event
         where e.g. a sudden EC2 scale-up drives correlated S3 and
-        DataTransfer cost increases. The affected services come from
-        CASCADE_SERVICES in consts_handler.
+        DataTransfer cost increases. Each cascade randomly selects 3-4
+        services from the full service list to ensure diversity across
+        cascades, which is critical for DBSCAN clustering to form
+        multi-service clusters.
 
         rng (np.random.RandomState): Seeded RNG.
         accounts (List[dict]): Available account metadata.
@@ -227,11 +230,17 @@ class AnomalyPlanner:
         shared cascade_id that links the affected services together.
         """
         cascades: List[dict] = []
+        services = self.__config["services"]
+        min_services = self.__config.get("cascade_min_services", 3)
+        max_services = min(min_services + 1, len(services))
 
         for _ in range(self.__config["num_cascade_anomalies"]):
             acct = accounts[rng.randint(len(accounts))]
             day = all_dates[rng.randint(len(all_dates))]
             cascade_id = uuid.uuid4().hex[:8]
+
+            n_services = rng.randint(min_services, max_services + 1)
+            selected = list(rng.choice(services, size=n_services, replace=False))
 
             cascades.append({
                 "anomaly_id": uuid.uuid4().hex[:8],
@@ -239,7 +248,7 @@ class AnomalyPlanner:
                 "date": day,
                 "account_id": acct["account_id"],
                 "account_name": acct["account_name"],
-                "services": list(CASCADE_SERVICES),
+                "services": selected,
             })
 
         return cascades
@@ -316,9 +325,8 @@ class AnomalyPlanner:
         tuples to anomaly metadata.
         """
         from src.utilities.consts_handler import (
-            CASCADE_EC2_MULTIPLIER,
-            CASCADE_S3_MULTIPLIER,
-            CASCADE_DT_MULTIPLIER,
+            CASCADE_SERVICE_MULTIPLIERS,
+            CASCADE_DEFAULT_MULTIPLIER,
             DRIFT_DAILY_COMPOUND,
         )
 
@@ -333,15 +341,12 @@ class AnomalyPlanner:
             }
 
         # Cascades
-        cascade_mults = {
-            "AmazonEC2": CASCADE_EC2_MULTIPLIER,
-            "AmazonS3": CASCADE_S3_MULTIPLIER,
-            "AWSDataTransfer": CASCADE_DT_MULTIPLIER,
-        }
         for cs in cascades:
             for svc in cs["services"]:
                 key = (cs["date"], cs["account_id"], svc)
-                m_range = cascade_mults.get(svc, (1.5, 2.0))
+                m_range = CASCADE_SERVICE_MULTIPLIERS.get(
+                    svc, CASCADE_DEFAULT_MULTIPLIER,
+                )
                 lookup[key] = {
                     "type": "cascade",
                     "cascade_id": cs["cascade_id"],

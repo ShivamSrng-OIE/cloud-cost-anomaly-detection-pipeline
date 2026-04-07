@@ -181,11 +181,32 @@ def generate_anomaly_report(
             "top_feature_shap": top_shap,
         })
 
-        # Generate individual text explanation
-        explanation = explain_single_anomaly(
-            model, row, feature_cols, categorical_cols, top_features,
+        # Build text explanation from pre-computed batch SHAP values
+        feature_impacts = sorted(
+            zip(all_features, sv, anom_for_shap[all_features].iloc[i].values),
+            key=lambda x: abs(x[1]),
+            reverse=True,
         )
-        explanations.append(explanation)
+        lines = []
+        lines.append(
+            f"Anomaly on {row['date'].strftime('%Y-%m-%d')} | "
+            f"Account: {row.get('account_name', row.get('account_id', 'N/A'))} | "
+            f"Service: {row.get('service', 'N/A')} | "
+            f"Region: {row.get('region', 'N/A')}"
+        )
+        lines.append(
+            f"Actual cost: ${row['daily_cost']:,.2f} | "
+            f"Predicted: ${row.get('lgbm_predicted_cost', 0):,.2f} | "
+            f"Ensemble score: {row.get('ensemble_score', 0):.3f}"
+        )
+        lines.append(f"Top {top_features} contributing features:")
+        for feat, shap_val, feat_val in feature_impacts[:top_features]:
+            direction = "↑ increased" if shap_val > 0 else "↓ decreased"
+            lines.append(
+                f"  {feat}: value={feat_val:.4f}, "
+                f"SHAP={shap_val:+.4f} ({direction} predicted cost)"
+            )
+        explanations.append("\n".join(lines))
 
     report_df = pd.DataFrame(records)
     report_df = report_df.sort_values("ensemble_score", ascending=False)

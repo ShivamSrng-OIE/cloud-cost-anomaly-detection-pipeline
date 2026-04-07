@@ -15,9 +15,6 @@ build/
 *.egg-info/
 *.egg
 
-# Pipeline output
-output/
-
 # Logs
 logs/
 
@@ -36,3 +33,9 @@ desktop.ini
 # Environment variables
 .env
 .env.local
+
+# Synthetic data (large generated files)
+output/synthetic-data/
+
+# Optuna study database (binary, regenerable)
+output/anomaly-detection-results/optuna/study.db

@@ -119,6 +119,41 @@ def _add_subparser_to_run_pipeline(
     )
 
 
+def _add_subparser_to_optimize_pipeline(
+    subparsers: ArgumentParser,
+) -> None:
+    """Register the optimize_pipeline subcommand."""
+    parser = subparsers.add_parser(
+        name="optimize_pipeline",
+        help=(
+            "Run Optuna hyperparameter optimization to find the best "
+            "model parameters for the anomaly detection pipeline."
+        ),
+        description=(
+            "Bayesian hyperparameter optimization (TPE sampler) over "
+            "all tunable pipeline parameters — LightGBM, STL, Isolation "
+            "Forest, ensemble weights/threshold, and DBSCAN eps. Best "
+            "parameters are written back to pipeline_config.yaml."
+        ),
+        aliases=[
+            "optimize",
+            "tune",
+        ],
+    )
+    parser.add_argument(
+        "--n_trials",
+        type=int,
+        default=None,
+        help="Maximum number of optimization trials (default: 50 from config).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help="Wall-clock time limit in minutes (default: no limit).",
+    )
+
+
 if __name__ == "__main__":
     parser = ArgumentParser(
         description="Cloud - Anomaly Detection Pipeline",
@@ -127,6 +162,7 @@ if __name__ == "__main__":
 
     _add_subparser_to_generate_synthetic_cur_data(subparsers)
     _add_subparser_to_run_pipeline(subparsers)
+    _add_subparser_to_optimize_pipeline(subparsers)
 
     kwargs = parser.parse_args().__dict__
     if subcommands := kwargs.pop("subcommands"):
@@ -136,6 +172,8 @@ if __name__ == "__main__":
             "generate_data": "generate_synthetic_cur_data",
             "pipeline": "run_pipeline",
             "detect": "run_pipeline",
+            "optimize": "optimize_pipeline",
+            "tune": "optimize_pipeline",
         }.get(subcommands, subcommands)
         getattr(Engine(), method)(**kwargs)
     else:
